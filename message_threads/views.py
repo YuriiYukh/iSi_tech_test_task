@@ -11,18 +11,29 @@ from .serializers import ThreadSerializer, MessageSerializer
 class ThreadViewSet(viewsets.ModelViewSet):
     queryset = Thread.objects.all()
     serializer_class = ThreadSerializer
-    pagination_class = LimitOffsetPagination
+    pagination_class = LimitOffsetPagination # <- example - /threads/list_for_user/?user_id=1&limit=5&offset=0
 
     @action(detail=False, methods=['get'])
     def list_for_user(self, request):
         """
-        List all threads for a given user.
+        Retrieve all threads for a specific user.
+        URL Validation: Ensure that the user_id is provided and valid.
+        Example: /threads/list_for_user/?user_id=1
         """
         user_id = request.query_params.get('user_id')
+
+        # Validate that user_id is provided and is an integer (url validation)
+        if not user_id:
+            return Response({"error": "user_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return Response({"error": "user_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+
         user = get_object_or_404(User, id=user_id)
         threads = Thread.objects.filter(participants=user)
-        
-        page = self.paginate_queryset(threads) # <- Applied pagination
+
+        page = self.paginate_queryset(threads)  # <- Applied pagination
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
@@ -32,13 +43,22 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        If a thread with the specified participants already exists, return it.
-        Otherwise, create a new thread.
+        Create a new thread, or return an existing one if the same participants already exist.
+        URL Validation: Validate that participants array contains exactly 2 participants.
         """
         participants = request.data.get('participants')
         if not participants or len(participants) != 2:
             return Response({"error": "A thread must have exactly 2 participants."},
                             status=status.HTTP_400_BAD_REQUEST)
+
+        for participant_id in participants:
+            try:
+                int(participant_id)
+            except ValueError:
+                return Response({"error": f"Invalid participant ID: {participant_id}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Ensure each participant exists in the database
+            user = get_object_or_404(User, id=participant_id)
 
         # Check if a thread with these participants already exists
         existing_thread = Thread.objects.filter(
@@ -52,13 +72,21 @@ class ThreadViewSet(viewsets.ModelViewSet):
 class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
-    pagination_class = LimitOffsetPagination
+    pagination_class = LimitOffsetPagination # <- example: /messages/?limit=5&offset=0
 
     @action(detail=False, methods=['get'], url_path='thread/(?P<thread_id>\d+)/messages')
     def list_for_thread(self, request, thread_id=None):
         """
-        List all messages for a given thread.
+        List all messages for a specific thread.
+        URL Validation: Ensure that thread_id is valid.
+        Example: /messages/thread/1/messages/
         """
+        # Validate that thread_id is a valid integer and exists in the database
+        try:
+            thread_id = int(thread_id)
+        except ValueError:
+            return Response({"error": "thread_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+
         thread = get_object_or_404(Thread, id=thread_id)
         messages = Message.objects.filter(thread=thread)
 
@@ -73,11 +101,20 @@ class MessageViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='unread-count')
     def unread_count(self, request):
         """
-        Get the count of unread messages for a specific user.
-        Expects the `user_id` to be passed as a query parameter.
+        Retrieve the count of unread messages for a specific user.
+        URL Validation: Ensure user_id is valid.
         Example: /messages/unread-count/?user_id=1
         """
         user_id = request.query_params.get('user_id')
+        
+        # Validate that user_id is provided and is an integer
+        if not user_id:
+            return Response({"error": "user_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return Response({"error": "user_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+
         user = get_object_or_404(User, id=user_id)
         unread_messages = Message.objects.filter(
             thread__participants=user, is_read=False)
@@ -88,7 +125,10 @@ class MessageViewSet(viewsets.ModelViewSet):
     def mark_as_read(self, request, pk=None):
         """
         Mark a message as read.
+        URL Validation: Ensure that the message ID (pk) is valid.
+        Example: /messages/1/mark-as-read/
         """
+        # Validate that the message ID (pk) exists
         message = get_object_or_404(Message, pk=pk)
         message.is_read = True
         message.save()
