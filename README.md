@@ -6,7 +6,7 @@ Getting Started
 1. Clone the Repository
 
 ```
-git clone
+git clone https://github.com/YuriiYukh/iSi_tech_test_task.git
 cd django-test-task
 ```
 
