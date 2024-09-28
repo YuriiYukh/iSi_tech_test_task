@@ -1,17 +1,26 @@
 from django.contrib.auth.models import User
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.generics import get_object_or_404
 from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.permissions import IsAuthenticated
+
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
 from .models import Thread, Message
 from .serializers import ThreadSerializer, MessageSerializer
+
 
 
 class ThreadViewSet(viewsets.ModelViewSet):
     queryset = Thread.objects.all()
     serializer_class = ThreadSerializer
     pagination_class = LimitOffsetPagination # <- example - /threads/list_for_user/?user_id=1&limit=5&offset=0
+    
+    authentication_classes = [JWTAuthentication]  # Use JWT authentication
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
     def list_for_user(self, request):
@@ -73,6 +82,9 @@ class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
     pagination_class = LimitOffsetPagination # <- example: /messages/?limit=5&offset=0
+    
+    authentication_classes = [JWTAuthentication]  # Use JWT authentication
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'], url_path='thread/(?P<thread_id>\d+)/messages')
     def list_for_thread(self, request, thread_id=None):
