@@ -53,21 +53,26 @@ class ThreadViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """
         Create a new thread, or return an existing one if the same participants already exist.
-        URL Validation: Validate that participants array contains exactly 2 participants.
+        URL Validation: Validate that participants array contains less than 2 participants.
         """
         participants = request.data.get('participants')
-        if not participants or len(participants) != 2:
-            return Response({"error": "A thread must have exactly 2 participants."},
+        if not participants or len(participants) > 2:
+            return Response({"error": "A thread must have at least one, but less than 2 participants."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        for participant_id in participants:
-            try:
-                int(participant_id)
-            except ValueError:
-                return Response({"error": f"Invalid participant ID: {participant_id}"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            participant_ids = [int(participant_id)
+                               for participant_id in participants]
+        except ValueError as e:
+            return Response({"error": f"Invalid participant ID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Ensure each participant exists in the database
-            user = get_object_or_404(User, id=participant_id)
+        # Check if all participants exist with a single query
+        valid_participants = User.objects.filter(id__in=participant_ids)
+
+        # Ensure the number of valid participants matches the number of provided participants
+        if valid_participants.count() != len(participant_ids):
+            return Response({"error": "One or more participant IDs are invalid."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         # Check if a thread with these participants already exists
         existing_thread = Thread.objects.filter(
